@@ -46,38 +46,47 @@ jobs:
         tcl-version: ${{ fromJSON(github.event.inputs.tcl-versions) }}
 
     steps:
+    - name: Setup BAWT environment
+      shell: pwsh
+      run: |
+        $GH_BAWT_BUILDDIR="BawtBuild/${{ matrix.tcl-version }}/${{ github.event.inputs.config }}/Windows/${{ matrix.architecture }}"
+        "GH_BAWT_BUILDDIR=$GH_BAWT_BUILDDIR" >> $env:GITHUB_ENV
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Download BAWT framework
+      shell: pwsh
       run: |
         Invoke-WebRequest -Uri "https://www.bawt.tcl3d.org/download/Framework/Bawt-3.2.0.zip" -OutFile "Bawt-3.2.0.zip"
         Expand-Archive -Path "Bawt-3.2.0.zip" -DestinationPath "." -Force
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      shell: pwsh
 
     - name: Download MSYS/MinGW
+      shell: pwsh
       run: |
         Set-Location "Bawt-3.2.0/Bootstrap-Windows"
         Invoke-WebRequest -Uri "https://www.bawt.tcl3d.org/download/Bootstrap-Windows/gcc14.2.0_x86_64-w64-mingw32.7z" -OutFile "gcc14.2.0_x86_64-w64-mingw32.7z"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Set-Location "../.."
-      shell: pwsh
 
     - name: Build Tcl/Tk Distribution
+      shell: cmd
       run: |
         Bawt-3.2.0\tclkit-win32-intel.exe Bawt-3.2.0\Bawt.tcl --rootdir BawtBuild/${{ matrix.tcl-version }}/${{ github.event.inputs.config }} --architecture ${{ matrix.architecture }} --compiler gcc --numjobs 4 --complete ${{ github.event.inputs.config }}.bawt --tclversion ${{ matrix.tcl-version }} --exclude ffmpeg
-      shell: cmd
 
     - name: Upload build logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: build-logs-windows-${{ matrix.architecture }}
-        path: BawtBuild/${{ matrix.tcl-version }}/${{ github.event.inputs.config }}/Windows/${{ matrix.architecture }}/Logs/
+        path: ${{ env.GH_BAWT_BUILDDIR }}/Logs/
 
     - name: Upload distribution
       uses: actions/upload-artifact@v4
       with:
         name: tcl-distribution-windows-${{ matrix.tcl-version }} ${{ matrix.architecture }}
-        path: BawtBuild/${{ matrix.tcl-version }}/${{ github.event.inputs.config }}/Windows/${{ matrix.architecture }}/Release/Distribution/opt/Tcl
+        path: ${{ env.GH_BAWT_BUILDDIR }}/Release/Distribution/opt/Tcl
 
   build-linux:
     if: github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all'
