@@ -53,7 +53,7 @@ jobs:
         "GH_BAWT_BUILDDIR=$GH_BAWT_BUILDDIR" >> $env:GITHUB_ENV
 
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Download BAWT framework
       shell: pwsh
@@ -93,9 +93,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        architecture: [64]
+        architecture: ${{ fromJSON(github.event.inputs.architectures) }}
+        tcl-version: ${{ fromJSON(github.event.inputs.tcl-versions) }}
 
     steps:
+    - name: Setup BAWT environment
+      run: |
+       GH_BAWT_BUILDDIR="BawtBuild/${{ matrix.tcl-version }}/${{ github.event.inputs.config }}/Linux/${{ matrix.architecture }}"
+       echo "GH_BAWT_BUILDDIR=$GH_BAWT_BUILDDIR" >> $GITHUB_ENV
+
     - name: Checkout BAWT repository
       uses: actions/checkout@v4
 
@@ -119,19 +125,14 @@ jobs:
 
     - name: Build Tcl/Tk Distribution
       run: |
-        cd Bawt-3.2.0
-        SETUP_FILE="${{ github.event.inputs.setup_file }}"
-        if [ -z "$SETUP_FILE" ]; then
-          SETUP_FILE="Setup/Tcl_Basic.bawt"
-        fi
-        ./Build-Linux.sh intel ${{ matrix.architecture }} "$SETUP_FILE" update
+        Bawt-3.2.0/tclkit-Linux64-intel Bawt-3.2.0/Bawt.tcl --rootdir BawtBuild/${{ matrix.tcl-version }}/${{ github.event.inputs.config }} --architecture ${{ matrix.architecture }} --compiler gcc --numjobs 4 --complete --tclversion ${{ matrix.tcl-version }} --exclude ffmpeg ${{ github.event.inputs.config }}.bawt all
 
     - name: Upload build logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: build-logs-linux-${{ matrix.architecture }}
-        path: BawtBuild/Linux/x${{ matrix.architecture }}/Logs/
+        path: ${{ env.GH_BAWT_BUILDDIR }}/Logs/
 
     - name: Upload distribution
       uses: actions/upload-artifact@v4
