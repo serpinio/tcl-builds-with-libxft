@@ -72,20 +72,29 @@ jobs:
 
         # Modify internal VFS of all potential bootstrap/base kits
         cd Bawt-3.2.0
-        for kit in tclkit-Linux64*; do
-            if [ -f "$kit" ] && [ ! -d "$kit" ]; then
-                echo "Patching internal VFS of $kit..."
-                ./tclkit-Linux64-intel Bawt.tcl sdx unwrap "$kit" || \
-                ./tclkit-Linux64-intel BawtAtWork/Libraries/sdx.kit unwrap "$kit"
-                
-                if [ -f "${kit}.vfs/boot.tcl" ]; then
-                    cp -v ../patches/boot-tcl9.tcl "${kit}.vfs/boot.tcl"
-                    ./tclkit-Linux64-intel Bawt.tcl sdx wrap "$kit" -writable || \
-                    ./tclkit-Linux64-intel BawtAtWork/Libraries/sdx.kit wrap "$kit" -writable
+        # Dynamically locate sdx.kit to avoid path hardcoding issues
+        SDX_PATH=$(find . -name "sdx.kit" | head -n 1)
+        echo "Found SDX at: $SDX_PATH"
+
+        if [ -n "$SDX_PATH" ]; then
+            for kit in tclkit-Linux64*; do
+                if [ -f "$kit" ] && [ ! -d "$kit" ]; then
+                    echo "Patching internal VFS of $kit..."
+                    # Invoke SDX directly via the tclkit interpreter to unwrap
+                    ./tclkit-Linux64-intel "$SDX_PATH" unwrap "$kit"
+                    
+                    if [ -f "${kit}.vfs/boot.tcl" ]; then
+                        cp -v ../patches/boot-tcl9.tcl "${kit}.vfs/boot.tcl"
+                        # Rewrap the binary with patched boot script
+                        ./tclkit-Linux64-intel "$SDX_PATH" wrap "$kit" -writable
+                    fi
+                    rm -rf "${kit}.vfs"
                 fi
-                rm -rf "${kit}.vfs"
-            fi
-        done
+            done
+        else
+            echo "CRITICAL ERROR: sdx.kit not found!"
+            exit 1
+        fi
         cd ..
 
         # replace ONLY text files containing fingerprints
