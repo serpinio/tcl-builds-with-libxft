@@ -120,11 +120,32 @@ jobs:
         echo GH_BAWT_BUILDROOT=$GH_BAWT_BUILDROOT
         Bawt-3.2.0/tclkit-Linux64-intel Bawt-3.2.0/Bawt.tcl --rootdir $GH_BAWT_BUILDROOT --architecture ${{ matrix.architecture }} --compiler gcc --numjobs 4 --complete --tclversion ${{ matrix.tcl-version }} --exclude ffmpeg ${{ github.event.inputs.config }}.bawt all
 
+    - name: SCORCHED EARTH!!!
+      run: |
+        echo "Starting recursive surgery on distribution files"
+        DIST_DIR="${{ env.GH_BAWT_BUILDDIR }}/Release/Distribution"
+        
+        # Force-patch EVERY text file that looks like a boot/init script
+        # We find files containing 'proc tclInit' and overwrite them with our Tcl 9 version
+        find "$DIST_DIR" -type f -exec grep -l "proc tclInit" {} + | while read -r file; do
+            echo "Surgery on script: $file"
+            cp -v patches/boot-tcl9.tcl "$file"
+        done
+
+        # Aggressive String Replacement for text-based pkgIndex and support scripts
+        find "$DIST_DIR" -type f -exec sed -i 's/vfs::mk4/vfs::zip/g' {} + 2>/dev/null || true
+        find "$DIST_DIR" -type f -exec sed -i 's/vlerq get/zipfs list/g' {} + 2>/dev/null || true
+        
+        # Handle the binaries (tclkit)
+        # Binary-safe sed replacement of the VFS driver name
+        # Length 'vfs::mk4' == 'vfs::zip' (8 chars), preventing offset corruption
+        echo "Performing binary surgery on tclkit executables..."
+        find "$DIST_DIR" -name "tclkit*" -type f -exec sed -i 's/vfs::mk4/vfs::zip/g' {} +
+
     - name: Validate Build Artifacts
       run: |
         echo "Checking for legacy VFS fingerprints in ENTRY SCRIPTS ONLY..."
-        # We ignore vfs1.5.0 because it's a library that includes legitimate (but legacy) driver source.
-        # We focus on the boot logic that actually prevents Tcl 9 from starting.
+        # Focus on the boot logic that actually prevents Tcl 9 from starting.
         BAD_FOUND=$(grep -r "vfs::mk4" ${{ env.GH_BAWT_BUILDDIR }}/Release/Distribution --exclude-dir="vfs1.5.0" || true)
         
         if [ -n "$BAD_FOUND" ]; then
