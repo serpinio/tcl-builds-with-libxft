@@ -61,23 +61,21 @@ jobs:
 
     - name: Patch BAWT legacy boot scripts
       run: |
-        # Using the patch file from the repository to overwrite BAWT templates
-        # Trying to force the replacement as it didn't have effect the last run
-        # Primary pass. replace all files explicitly named boot.tcl
+        # 1. Primary pass. replace files explicitly named boot.tcl
         find Bawt-3.2.0 -name "boot.tcl" -print -exec cp patches/boot-tcl9.tcl {} \;
         
-        # Secondary pass: target template directories for standalone kits
+        # 2. Target known template directory
         if [ -d "Bawt-3.2.0/BawtAtWork/Templates" ]; then
             cp -v patches/boot-tcl9.tcl Bawt-3.2.0/BawtAtWork/Templates/boot.tcl || true
             cp -v patches/boot-tcl9.tcl Bawt-3.2.0/BawtAtWork/Templates/init.tcl || true
         fi
 
-        # Aggressive pass. replace any script containing legacy VFS/Metakit fingerprints
-        # This targets the source of the 'unwrap' code found in previous runs
-        grep -lR "vfs::mk4" Bawt-3.2.0 | xargs -I {} cp -v patches/boot-tcl9.tcl {}
-        grep -lR "vlerq get" Bawt-3.2.0 | xargs -I {} cp -v patches/boot-tcl9.tcl {}
+        # replace ONLY text files containing fingerprints
+        # Specifically excluding the tclkit binaries to prevent overwriting executables
+        grep -lR "vfs::mk4" Bawt-3.2.0 --exclude="tclkit*" | xargs -I {} sh -c 'if file "{}" | grep -q "text"; then cp -v patches/boot-tcl9.tcl "{}"; fi'
+        grep -lR "vlerq get" Bawt-3.2.0 --exclude="tclkit*" | xargs -I {} sh -c 'if file "{}" | grep -q "text"; then cp -v patches/boot-tcl9.tcl "{}"; fi'
 
-        echo "Successfully updated BAWT templates using patches/boot-tcl9.tcl"
+        echo "Successfully updated BAWT templates"
 
     - name: Build Tcl/Tk Distribution
       run: |
