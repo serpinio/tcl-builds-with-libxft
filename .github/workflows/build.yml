@@ -64,15 +64,20 @@ jobs:
         # Primary pass. replace files explicitly named boot.tcl
         find Bawt-3.2.0 -name "boot.tcl" -print -exec cp patches/boot-tcl9.tcl {} \;
         
+        # Retool the Engine lol. inject Tcl 9 compatibility into Bawt.tcl
+        # This IN THEORY should prevent the generator from writing legacy VFS strings into new kits
+        cd Bawt-3.2.0
+        echo "Injecting Tcl 9 compatibility into BAWT engine..."
+        sed -i 's/vfs::mk4/vfs::zip/g' Bawt.tcl
+        sed -i 's/vlerq get/zipfs list/g' Bawt.tcl
+        
         # Target known template directory
-        if [ -d "Bawt-3.2.0/BawtAtWork/Templates" ]; then
-            cp -v patches/boot-tcl9.tcl Bawt-3.2.0/BawtAtWork/Templates/boot.tcl || true
-            cp -v patches/boot-tcl9.tcl Bawt-3.2.0/BawtAtWork/Templates/init.tcl || true
+        if [ -d "BawtAtWork/Templates" ]; then
+            cp -v ../patches/boot-tcl9.tcl BawtAtWork/Templates/boot.tcl || true
+            cp -v ../patches/boot-tcl9.tcl BawtAtWork/Templates/init.tcl || true
         fi
 
         # Modify internal VFS of all potential bootstrap/base kits
-        cd Bawt-3.2.0
-        
         # Locate the SDX entry point within the BAWT library structure
         # Im getting tired of this
         SDX_TCL=$(find . -name "sdx.tcl" | head -n 1)
@@ -94,7 +99,12 @@ jobs:
                 fi
             done
         else
-            echo "Warning: sdx.tcl not found, aggressive grep pass left"
+            echo "Warning: sdx.tcl not found, applying binary sed replacement as fallback"
+            for kit in tclkit-Linux64*; do
+                if [ -f "$kit" ]; then
+                    sed -i 's/vfs::mk4/vfs::zip/g' "$kit" || true
+                fi
+            done
         fi
         cd ..
 
@@ -109,6 +119,16 @@ jobs:
       run: |
         echo GH_BAWT_BUILDROOT=$GH_BAWT_BUILDROOT
         Bawt-3.2.0/tclkit-Linux64-intel Bawt-3.2.0/Bawt.tcl --rootdir $GH_BAWT_BUILDROOT --architecture ${{ matrix.architecture }} --compiler gcc --numjobs 4 --complete --tclversion ${{ matrix.tcl-version }} --exclude ffmpeg ${{ github.event.inputs.config }}.bawt all
+
+    - name: Validate Build Artifacts
+      run: |
+        echo "Checking distribution for legacy Tcl8 fingerprints"
+        if grep -r "vfs::mk4" ${{ env.GH_BAWT_BUILDDIR }}/Release/Distribution; then
+            echo "CRITICAL ERROR. Distribution STILL contains legacy vfs::mk4 code. Build is incompatible with Tcl 9."
+            exit 1
+        else
+          echo "No legacy VFS fingerprints found in distribution!"
+        fi
 
     - name: Upload distribution
       uses: actions/upload-artifact@v4
