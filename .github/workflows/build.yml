@@ -61,14 +61,32 @@ jobs:
 
     - name: Patch BAWT legacy boot scripts
       run: |
-        # 1. Primary pass. replace files explicitly named boot.tcl
+        # Primary pass. replace files explicitly named boot.tcl
         find Bawt-3.2.0 -name "boot.tcl" -print -exec cp patches/boot-tcl9.tcl {} \;
         
-        # 2. Target known template directory
+        # Target known template directory
         if [ -d "Bawt-3.2.0/BawtAtWork/Templates" ]; then
             cp -v patches/boot-tcl9.tcl Bawt-3.2.0/BawtAtWork/Templates/boot.tcl || true
             cp -v patches/boot-tcl9.tcl Bawt-3.2.0/BawtAtWork/Templates/init.tcl || true
         fi
+
+        # Modify internal VFS of all potential bootstrap/base kits
+        cd Bawt-3.2.0
+        for kit in tclkit-Linux64*; do
+            if [ -f "$kit" ] && [ ! -d "$kit" ]; then
+                echo "Patching internal VFS of $kit..."
+                ./tclkit-Linux64-intel Bawt.tcl sdx unwrap "$kit" || \
+                ./tclkit-Linux64-intel BawtAtWork/Libraries/sdx.kit unwrap "$kit"
+                
+                if [ -f "${kit}.vfs/boot.tcl" ]; then
+                    cp -v ../patches/boot-tcl9.tcl "${kit}.vfs/boot.tcl"
+                    ./tclkit-Linux64-intel Bawt.tcl sdx wrap "$kit" -writable || \
+                    ./tclkit-Linux64-intel BawtAtWork/Libraries/sdx.kit wrap "$kit" -writable
+                fi
+                rm -rf "${kit}.vfs"
+            fi
+        done
+        cd ..
 
         # replace ONLY text files containing fingerprints
         # Specifically excluding the tclkit binaries to prevent overwriting executables
