@@ -126,10 +126,15 @@ jobs:
         DIST_DIR="${{ env.GH_BAWT_BUILDDIR }}/Release/Distribution"
         
         # Force-patch EVERY text file that looks like a boot/init script
-        # We find files containing 'proc tclInit' and overwrite them with our Tcl 9 version
+        # Find files containing 'proc tclInit'
+        # Last try - check if the file is 'text' before using 'cp' to avoid corrupting ELF binaries
         find "$DIST_DIR" -type f -exec grep -l "proc tclInit" {} + | while read -r file; do
-            echo "Surgery on script: $file"
-            cp -v patches/boot-tcl9.tcl "$file"
+            if file "$file" | grep -q "text"; then
+                echo "Surgery on script: $file"
+                cp -v patches/boot-tcl9.tcl "$file"
+            else
+                echo "Found proc tclInit in binary, skipping overwrite to protect ELF header: $file"
+            fi
         done
 
         # Aggressive String Replacement for text-based pkgIndex and support scripts
